@@ -1,44 +1,26 @@
-rustdesk-server (1.1.14) UNRELEASED; urgency=medium
-  * Fix windows crash
+rustdesk-server (1.4.3) UNRELEASED; urgency=medium
 
-rustdesk-server (1.1.13) UNRELEASED; urgency=medium
-  * Version check and refactor hbb_common to share with rustdesk client
+  * 变更版本号为1.4.3
 
-rustdesk-server (1.1.12) UNRELEASED; urgency=medium
-  * WS real ip
-  * Bump s6-overlay to v3.2.0.0 and fix env warnings
+ -- Open Rustdesk Support Team <ymwlpoolc@qq.com>  Fri, 05 Sep 2025 11:27:05 +0800
 
-rustdesk-server (1.1.11-1) UNRELEASED; urgency=medium
-  * set reuse port to make restart friendly
-  * revert hbbr `-k` to not ruin back-compatibility
+rustdesk-server (1.4.2) UNRELEASED; urgency=medium
 
-rustdesk-server (1.1.11) UNRELEASED; urgency=medium
-  * change -k to default '-', so you need not to set -k any more
+  * 明确CI工作流使用的版本，修复客户端匹配问题
+  * 修复hbbs中历史遗留问题
+  * Update version 1.4.2
 
-rustdesk-server (1.1.10-3) UNRELEASED; urgency=medium
-  * fix on -2
+ -- Open Rustdesk Support Team <ymwlpoolc@qq.com>  Mon, 07 Jul 2025 12:48:58 +0800
 
-rustdesk-server (1.1.10-2) UNRELEASED; urgency=medium
+rustdesk-server (1.4.1) UNRELEASED; urgency=medium
 
-  * fix hangup signal exit when run with nohup
-  * some minors
+  * Update version 1.4.1
+  * 处理相关格式问题 
 
-rustdesk-server (1.1.9) UNRELEASED; urgency=medium
+ -- Open Rustdesk Support Team <ymwlpoolc@qq.com>  Fri, 04 Jul 2025 19:03:43 +0800
 
-  * remove unsafe
-
-rustdesk-server (1.1.8) UNRELEASED; urgency=medium
-
-  * fix test_hbbs and mask in lan
-
-rustdesk-server (1.1.7) UNRELEASED; urgency=medium
-
-  * ipv6 support
-
- -- rustdesk <info@rustdesk.com>  Wed, 11 Jan 2023 11:27:00 +0800
-
-rustdesk-server (1.1.6) UNRELEASED; urgency=medium
+rustdesk-server (1.4.0) UNRELEASED; urgency=medium
 
   * Initial release
 
- -- open-trade <info@rustdesk.com>  Fri, 15 Jul 2022 12:27:27 +0200
+ -- Open Rustdesk Support Team <ymwlpoolc@qq.com>  Fri, 04 Jul 2025 16:00:59 +0800
