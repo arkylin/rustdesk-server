@@ -14,8 +14,8 @@
 !define APP_NAME "RustDeskServer"
 !define PRODUCT_NAME "rustdesk_server"
 !define PRODUCT_DESCRIPTION "Installer for ${PRODUCT_NAME}"
-!define COPYRIGHT "Copyright © 2021"
-!define VERSION "1.1.14"
+!define COPYRIGHT "Copyright © 2025"
+!define VERSION "1.4.3"
 
 VIProductVersion "${VERSION}.0"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"

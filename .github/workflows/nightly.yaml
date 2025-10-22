@@ -1,0 +1,14 @@
+name: Nightly Build
+
+on:
+  workflow_dispatch:
+  
+permissions:
+  contents: write
+jobs:
+  run-nightly-build:
+    uses: ./.github/workflows/build.yaml
+    secrets: inherit
+    with:
+      upload-artifact: true
+      upload-tag: "nightly"
