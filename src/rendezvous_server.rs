@@ -1,6 +1,5 @@
 use crate::common::*;
 use crate::peer::*;
-use hbb_common::bytes::BufMut;
 use hbb_common::{
     allow_err, bail,
     bytes::{Bytes, BytesMut},
@@ -17,11 +16,8 @@ use hbb_common::{
         register_pk_response::Result::{INVALID_ID_FORMAT, TOO_FREQUENT, UUID_MISMATCH},
         *,
     },
-    sodiumoxide::crypto::{
-        box_, box_::PublicKey, box_::SecretKey, secretbox, secretbox::Key, secretbox::Nonce, sign,
-    },
+    sodiumoxide::crypto::{box_, box_::PublicKey, box_::SecretKey, secretbox, sign},
     sodiumoxide::hex,
-    tcp,
     tcp::Encrypt,
     tcp::{listen_any, FramedStream},
     timeout,
@@ -40,7 +36,6 @@ use hbb_common::{
 use ipnetwork::Ipv4Network;
 
 use crate::jwt;
-use std::io::Error;
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -214,7 +209,7 @@ impl RendezvousServer {
         let must_login = get_arg("must-login");
         log::debug!("must_login={}", must_login);
         if must_login.to_uppercase() == "Y"
-            || (must_login == ""
+            || (must_login.is_empty()
                 && std::env::var("MUST_LOGIN")
                     .unwrap_or_default()
                     .to_uppercase()
@@ -613,7 +608,7 @@ impl RendezvousServer {
                     }
                 }
                 Some(rendezvous_message::Union::KeyExchange(ex)) => {
-                    log::trace!("KeyExchange {:?} <- bytes: {:?}", addr, hex::encode(&bytes));
+                    log::trace!("KeyExchange {:?} <- bytes: {:?}", addr, hex::encode(bytes));
                     if ex.keys.len() != 2 {
                         log::error!("Handshake failed: invalid phase 2 key exchange message");
                         return false;
@@ -627,7 +622,7 @@ impl RendezvousServer {
                         their_pk,
                         &cryptobox,
                     );
-                    log::debug!("KeyExchange symetric key: {:?}", hex::encode(&symetric_key));
+                    log::debug!("KeyExchange symetric key: {:?}", hex::encode(symetric_key));
                     let key = secretbox::Key::from_slice(&symetric_key);
                     match key {
                         Some(key) => {
@@ -647,7 +642,7 @@ impl RendezvousServer {
                     }
                 }
                 Some(rendezvous_message::Union::OnlineRequest(or)) => {
-                    let mut states = self.peers_online_state(or.peers).await;
+                    let states = self.peers_online_state(or.peers).await;
                     let mut msg_out = RendezvousMessage::new();
                     msg_out.set_online_response(OnlineResponse {
                         states: states.into(),
@@ -662,7 +657,7 @@ impl RendezvousServer {
     }
 
     async fn peers_online_state(&mut self, peers: Vec<String>) -> BytesMut {
-        let mut states = BytesMut::zeroed((peers.len() + 7) / 8);
+        let mut states = BytesMut::zeroed(peers.len().div_ceil(8));
         for (i, peer_id) in peers.iter().enumerate() {
             if let Some(peer) = self.pm.get_in_memory(peer_id).await {
                 let elapsed = peer.read().await.last_reg_time.elapsed().as_millis() as i32;
@@ -816,11 +811,11 @@ impl RendezvousServer {
     }
 
     #[inline]
-    async fn handle_hole_sent<'a>(
+    async fn handle_hole_sent(
         &mut self,
         phs: PunchHoleSent,
         addr: SocketAddr,
-        socket: Option<&'a mut FramedSocket>,
+        socket: Option<&mut FramedSocket>,
     ) -> ResultType<()> {
         // punch hole sent from B, tell A that B is ready to be connected
         let addr_a = AddrMangle::decode(&phs.socket_addr);
@@ -850,11 +845,11 @@ impl RendezvousServer {
     }
 
     #[inline]
-    async fn handle_local_addr<'a>(
+    async fn handle_local_addr(
         &mut self,
         la: LocalAddr,
         addr: SocketAddr,
-        socket: Option<&'a mut FramedSocket>,
+        socket: Option<&mut FramedSocket>,
     ) -> ResultType<()> {
         // relay local addrs of B to A
         let addr_a = AddrMangle::decode(&la.socket_addr);
@@ -1004,7 +999,7 @@ impl RendezvousServer {
         stream: &mut FramedStream,
         peers: Vec<String>,
     ) -> ResultType<()> {
-        let mut states = self.peers_online_state(peers).await;
+        let states = self.peers_online_state(peers).await;
 
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_response(OnlineResponse {
@@ -1096,7 +1091,7 @@ impl RendezvousServer {
             counter.1 = now;
 
             let counter = &mut old.1;
-            let is_new = counter.0.get(id).is_none();
+            let is_new = !counter.0.contains(id);
             if counter.1.elapsed().as_secs() > DAY_SECONDS {
                 counter.0.clear();
             } else if counter.0.len() > 300 {
@@ -1296,7 +1291,7 @@ impl RendezvousServer {
                 if let Ok(Ok(n)) = timeout(1000, stream.read(&mut buffer[..])).await {
                     if let Ok(data) = std::str::from_utf8(&buffer[..n]) {
                         let res = rs.check_cmd(data).await;
-                        stream.write(res.as_bytes()).await.ok();
+                        stream.write_all(res.as_bytes()).await.ok();
                     }
                 }
             });
@@ -1481,24 +1476,21 @@ impl RendezvousServer {
         let mut msg_out = RendezvousMessage::new();
         log::debug!("KeyExchange phase 1: send our pk for this tcp connection in a message signed with our server key");
         let sk = &self.inner.sk;
-        match sk {
-            Some(sk) => {
-                let our_pk_b = self.inner.secure_tcp_pk_b.clone();
-                let sm = sign::sign(&our_pk_b.0, &sk);
+        if let Some(sk) = sk {
+            let our_pk_b = self.inner.secure_tcp_pk_b;
+            let sm = sign::sign(&our_pk_b.0, sk);
 
-                let bytes_sm = Bytes::from(sm);
-                msg_out.set_key_exchange(KeyExchange {
-                    keys: vec![bytes_sm],
-                    ..Default::default()
-                });
-                log::trace!(
-                    "KeyExchange {:?} -> bytes: {:?}",
-                    addr,
-                    hex::encode(Bytes::from(msg_out.write_to_bytes().unwrap()))
-                );
-                Self::send_to_sink(sink, msg_out).await;
-            }
-            None => {}
+            let bytes_sm = Bytes::from(sm);
+            msg_out.set_key_exchange(KeyExchange {
+                keys: vec![bytes_sm],
+                ..Default::default()
+            });
+            log::trace!(
+                "KeyExchange {:?} -> bytes: {:?}",
+                addr,
+                hex::encode(Bytes::from(msg_out.write_to_bytes().unwrap()))
+            );
+            Self::send_to_sink(sink, msg_out).await;
         }
     }
 }
@@ -1569,6 +1561,7 @@ async fn test_hbbs(addr: SocketAddr) -> ResultType<()> {
 }
 
 #[inline]
+#[allow(dead_code)]
 async fn send_rk_res(
     socket: &mut FramedSocket,
     addr: SocketAddr,
