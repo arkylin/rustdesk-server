@@ -1,3 +1,5 @@
+中国可以用``ghcr.nju.edu.cn``
+
 ```
 version: '3'
 
@@ -13,7 +15,7 @@ services:
       - 21116:21116
       - 21116:21116/udp
       - 21118:21118
-    image: ghcr.io/arkylin/openrustdesk-server-s6:latest
+    image: ghcr.io/arkylin/rustdesk-server-s6:latest
     command: hbbs -r <server[:21117]>
     volumes:
       - ./data:/root
@@ -28,7 +30,7 @@ services:
     ports:
       - 21117:21117
       - 21119:21119
-    image: ghcr.io/arkylin/openrustdesk-server-s6:latest
+    image: ghcr.io/arkylin/rustdesk-server-s6:latest
     command: hbbr
     volumes:
       - ./data:/data

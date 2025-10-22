@@ -1,4 +1,4 @@
-name: Build OpenRustDesk-Server
+name: Build RustDesk-Server
 
 on:
   workflow_call:
