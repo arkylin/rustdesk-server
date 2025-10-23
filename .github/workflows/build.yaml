@@ -27,7 +27,8 @@ env:
   LATEST_TAG: "latest"
 
 permissions:
-   contents: write 
+   contents: write
+   packages: write 
   
 jobs:
   build:
