@@ -12,6 +12,10 @@ RUN \
 
 COPY rootfs /
 
+RUN chmod +x /etc/s6-overlay/s6-rc.d/*/run \
+             /etc/s6-overlay/s6-rc.d/key-secret/up.real \
+             /usr/bin/healthcheck.sh
+
 # Default environment variables
 # RELAY: Single relay server (backward compatible, takes precedence over RELAY_SERVERS)
 #        Set to "relay.example.com" as placeholder - will be ignored if not changed
