@@ -15,7 +15,7 @@ services:
       - 21116:21116
       - 21116:21116/udp
       - 21118:21118
-    image: ghcr.io/arkylin/rustdesk-server-s6:latest
+    image: ghcr.io/arkylin/rustdesk-server:latest
     command: hbbs -r <server[:21117]>
     volumes:
       - ./data:/root
@@ -30,10 +30,10 @@ services:
     ports:
       - 21117:21117
       - 21119:21119
-    image: ghcr.io/arkylin/rustdesk-server-s6:latest
+    image: ghcr.io/arkylin/rustdesk-server:latest
     command: hbbr
     volumes:
-      - ./data:/data
+      - ./data:/root
     networks:
       - rustdesk-net
     restart: unless-stopped
