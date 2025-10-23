@@ -12,6 +12,10 @@ RUN \
 
 COPY rootfs /
 
+RUN chmod +x /etc/s6-overlay/s6-rc.d/*/run \
+             /etc/s6-overlay/s6-rc.d/key-secret/up.real \
+             /usr/bin/healthcheck.sh
+
 ENV RELAY=relay.example.com
 ENV ENCRYPTED_ONLY=0
 
