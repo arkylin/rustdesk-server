@@ -1115,12 +1115,17 @@ impl RendezvousServer {
 
     fn get_relay_server(&self, _pa: IpAddr, _pb: IpAddr) -> String {
         if self.relay_servers.is_empty() {
+            log::debug!("No relay servers available");
             return "".to_owned();
         } else if self.relay_servers.len() == 1 {
-            return self.relay_servers[0].clone();
+            let server = self.relay_servers[0].clone();
+            log::debug!("Only one relay server available: {}", server);
+            return server;
         }
         let i = ROTATION_RELAY_SERVER.fetch_add(1, Ordering::SeqCst) % self.relay_servers.len();
-        self.relay_servers[i].clone()
+        let server = self.relay_servers[i].clone();
+        log::debug!("Selected relay server {} from {} available servers (index: {})", server, self.relay_servers.len(), i);
+        server
     }
 
     async fn check_cmd(&self, cmd: &str) -> String {
@@ -1506,17 +1511,21 @@ async fn check_relay_servers(rs0: Arc<RelayServers>, tx: Sender) {
         let rs = rs.clone();
         let x = x.clone();
         futs.push(tokio::spawn(async move {
-            if FramedStream::new(&host, None, CHECK_RELAY_TIMEOUT)
-                .await
-                .is_ok()
-            {
-                rs.lock().await.push(x);
+            log::info!("Checking relay server: {}", host);
+            match FramedStream::new(&host, None, CHECK_RELAY_TIMEOUT).await {
+                Ok(_) => {
+                    log::info!("Relay server {} is healthy", x);
+                    rs.lock().await.push(x);
+                }
+                Err(e) => {
+                    log::warn!("Relay server {} health check failed: {}", x, e);
+                }
             }
         }));
     }
     join_all(futs).await;
-    log::debug!("check_relay_servers");
     let rs = std::mem::take(&mut *rs.lock().await);
+    log::info!("Available relay servers after health check: {:?}", rs);
     if !rs.is_empty() {
         tx.send(Data::RelayServers(rs)).ok();
     }
