@@ -12,7 +12,13 @@ RUN \
 
 COPY rootfs /
 
-ENV RELAY=relay.example.com
+# Default environment variables
+# RELAY: Single relay server (backward compatible, takes precedence over RELAY_SERVERS)
+#        Set to "relay.example.com" as placeholder - will be ignored if not changed
+# RELAY_SERVERS: Multiple relay servers (comma-separated, supports load balancing & health checks)
+#        Example: RELAY_SERVERS=relay1.com:21117,relay2.com:21117
+ENV RELAY=
+ENV RELAY_SERVERS=
 ENV ENCRYPTED_ONLY=0
 
 EXPOSE 21115 21116 21116/udp 21117 21118 21119

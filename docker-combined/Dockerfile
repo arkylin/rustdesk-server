@@ -1,4 +1,4 @@
-FROM ghcr.io/arkylin/rustdesk-api:latest
+FROM busybox:stable
 
 ARG S6_OVERLAY_VERSION=3.2.0.0
 ARG S6_ARCH=x86_64
@@ -12,20 +12,20 @@ RUN \
 
 COPY rootfs /
 
-RUN chmod +x /etc/s6-overlay/s6-rc.d/*/run \
-             /etc/s6-overlay/s6-rc.d/key-secret/up.real \
-             /usr/bin/healthcheck.sh
-
-ENV RELAY=relay.example.com
+# Default environment variables
+# RELAY: Single relay server (backward compatible, takes precedence over RELAY_SERVERS)
+#        Set to "relay.example.com" as placeholder - will be ignored if not changed
+# RELAY_SERVERS: Multiple relay servers (comma-separated, supports load balancing & health checks)
+#        Example: RELAY_SERVERS=relay1.com:21117,relay2.com:21117
+ENV RELAY=
+ENV RELAY_SERVERS=
 ENV ENCRYPTED_ONLY=0
 
-EXPOSE 21114 21115 21116 21116/udp 21117 21118 21119
+EXPOSE 21115 21116 21116/udp 21117 21118 21119
 
 HEALTHCHECK --interval=10s --timeout=5s CMD /usr/bin/healthcheck.sh
 
-WORKDIR /app
-
-VOLUME /app/data
+WORKDIR /data
 
 VOLUME /data
 

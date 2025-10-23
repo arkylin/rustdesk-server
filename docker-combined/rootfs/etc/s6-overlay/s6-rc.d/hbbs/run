@@ -3,4 +3,20 @@ sleep 2
 cd /data
 PARAMS=
 [ "${ENCRYPTED_ONLY}" = "1" ] && PARAMS="-k _"
-/usr/bin/hbbs -r $RELAY $PARAMS
+
+# Smart relay configuration:
+# Priority 1: If RELAY is set and not the default placeholder, use -r parameter (backward compatible)
+# Priority 2: If RELAY_SERVERS is set, let hbbs use it via environment variable (multi-server support)
+# Priority 3: If RELAY is the default placeholder, skip -r parameter to avoid conflicts
+if [ -n "$RELAY" ] && [ "$RELAY" != "relay.example.com" ]; then
+    echo "[INFO] Using RELAY (-r parameter): $RELAY"
+    /usr/bin/hbbs -r "$RELAY" $PARAMS
+else
+    if [ -n "$RELAY_SERVERS" ]; then
+        echo "[INFO] Using RELAY_SERVERS (environment variable): $RELAY_SERVERS"
+    else
+        echo "[WARN] Neither RELAY nor RELAY_SERVERS configured. Set RELAY or RELAY_SERVERS for relay functionality."
+    fi
+    # Run hbbs without -r parameter, let it use RELAY_SERVERS environment variable
+    /usr/bin/hbbs $PARAMS
+fi
