@@ -97,6 +97,7 @@ type Receiver = mpsc::UnboundedReceiver<Data>;
 static ROTATION_RELAY_SERVER: AtomicUsize = AtomicUsize::new(0);
 type RelayServers = Vec<String>;
 const CHECK_RELAY_TIMEOUT: u64 = 3_000;
+const CHECK_RELAY_TIMEOUT_FAILOVER: u64 = 1_000; // Failover 模式使用更短的超时
 static ALWAYS_USE_RELAY: AtomicBool = AtomicBool::new(false);
 static MUST_LOGIN: AtomicBool = AtomicBool::new(false);
 static USE_FAILOVER: AtomicBool = AtomicBool::new(false);
@@ -242,11 +243,21 @@ impl RendezvousServer {
         }
 
         log::info!(
-            "RELAY_STRATEGY={}",
+            "RELAY_STRATEGY={} (timeout: {}ms, fast-fail: {})",
             if USE_FAILOVER.load(Ordering::SeqCst) {
                 "failover"
             } else {
                 "round-robin"
+            },
+            if USE_FAILOVER.load(Ordering::SeqCst) {
+                CHECK_RELAY_TIMEOUT_FAILOVER
+            } else {
+                CHECK_RELAY_TIMEOUT
+            },
+            if USE_FAILOVER.load(Ordering::SeqCst) {
+                "enabled"
+            } else {
+                "N/A"
             }
         );
         if test_addr.to_lowercase() != "no" {
@@ -1170,7 +1181,10 @@ impl RendezvousServer {
             // 同步检测（使用简单的TCP连接测试）
             log::debug!("Failover mode: checking relay server {}", host);
             if Self::check_relay_sync(&host) {
-                log::info!("Selected relay server {} (failover mode, first available)", server);
+                log::info!(
+                    "Selected relay server {} (failover mode, first available)",
+                    server
+                );
                 return server.clone();
             } else {
                 log::warn!("Relay server {} is not available, trying next...", server);
@@ -1182,22 +1196,68 @@ impl RendezvousServer {
     }
 
     fn check_relay_sync(host: &str) -> bool {
+        use std::io::ErrorKind;
         use std::net::{TcpStream, ToSocketAddrs};
-        use std::time::Duration;
+        use std::time::{Duration, Instant};
 
         // 解析地址
         let addr = match host.to_socket_addrs() {
             Ok(mut addrs) => match addrs.next() {
                 Some(addr) => addr,
-                None => return false,
+                None => {
+                    log::debug!("Failed to resolve address: {}", host);
+                    return false;
+                }
             },
-            Err(_) => return false,
+            Err(e) => {
+                log::debug!("DNS resolution failed for {}: {}", host, e);
+                return false;
+            }
         };
 
-        // 尝试连接
-        match TcpStream::connect_timeout(&addr, Duration::from_millis(CHECK_RELAY_TIMEOUT)) {
-            Ok(_) => true,
-            Err(_) => false,
+        // 尝试连接（使用更短的超时时间）
+        let start = Instant::now();
+        match TcpStream::connect_timeout(&addr, Duration::from_millis(CHECK_RELAY_TIMEOUT_FAILOVER)) {
+            Ok(_) => {
+                log::debug!("Relay server {} is reachable ({}ms)", host, start.elapsed().as_millis());
+                true
+            }
+            Err(e) => {
+                let elapsed = start.elapsed().as_millis();
+                // 快速失败检测：根据错误类型判断
+                match e.kind() {
+                    // 快速失败 - 连接被明确拒绝（几毫秒内返回）
+                    ErrorKind::ConnectionRefused => {
+                        log::debug!("Fast fail: Connection refused to {} ({}ms)", host, elapsed);
+                        false
+                    }
+                    // 快速失败 - 连接被重置
+                    ErrorKind::ConnectionReset => {
+                        log::debug!("Fast fail: Connection reset by {} ({}ms)", host, elapsed);
+                        false
+                    }
+                    // 快速失败 - 主机不可达（通常几十到几百毫秒）
+                    ErrorKind::HostUnreachable => {
+                        log::debug!("Fast fail: Host unreachable {} ({}ms)", host, elapsed);
+                        false
+                    }
+                    // 快速失败 - 网络不可达
+                    ErrorKind::NetworkUnreachable => {
+                        log::debug!("Fast fail: Network unreachable to {} ({}ms)", host, elapsed);
+                        false
+                    }
+                    // 超时 - 已经等待了完整的超时时间
+                    ErrorKind::TimedOut => {
+                        log::warn!("Timeout: {} not responding after {}ms", host, elapsed);
+                        false
+                    }
+                    // 其他错误
+                    _ => {
+                        log::warn!("Connection error to {} ({}ms): {}", host, elapsed, e);
+                        false
+                    }
+                }
+            }
         }
     }
 
