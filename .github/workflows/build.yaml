@@ -54,19 +54,23 @@ jobs:
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: "1.87.0"
+          toolchain: "1.88.0"
           override: true
           default: true
           components: rustfmt
           profile: minimal
           target: ${{ matrix.job.target }}
 
+      - name: Verify Rust version
+        run: rustc --version
+
+      - name: Install cross
+        run: |
+          rustc --version
+          cargo install cross --git https://github.com/cross-rs/cross
+
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --all-features --target=${{ matrix.job.target }}
-          use-cross: true  
+        run: cross build --release --all-features --target=${{ matrix.job.target }}  
 
       - name: Exec chmod
         run: chmod -v a+x target/${{ matrix.job.target }}/release/*
@@ -94,7 +98,7 @@ jobs:
       - name: Install toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: "1.87.0"
+          toolchain: "1.88.0"
           override: true
           default: true
           components: rustfmt
@@ -106,7 +110,6 @@ jobs:
         with:
           command: build
           args: --release --all-features --target=x86_64-pc-windows-msvc
-          use-cross: true
 
       - name: Install Node.js
         uses: actions/setup-node@v5
@@ -139,7 +142,7 @@ jobs:
 
       - name: Build UI setup file
         run: |
-          rustup default 1.87.0
+          rustup default 1.88.0
           cargo build --release
           xcopy /y ..\target\x86_64-pc-windows-msvc\release\*.exe setup\bin\
           xcopy /y target\release\*.exe setup\
