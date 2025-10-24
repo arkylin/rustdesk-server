@@ -1217,9 +1217,14 @@ impl RendezvousServer {
 
         // 尝试连接（使用更短的超时时间）
         let start = Instant::now();
-        match TcpStream::connect_timeout(&addr, Duration::from_millis(CHECK_RELAY_TIMEOUT_FAILOVER)) {
+        match TcpStream::connect_timeout(&addr, Duration::from_millis(CHECK_RELAY_TIMEOUT_FAILOVER))
+        {
             Ok(_) => {
-                log::debug!("Relay server {} is reachable ({}ms)", host, start.elapsed().as_millis());
+                log::debug!(
+                    "Relay server {} is reachable ({}ms)",
+                    host,
+                    start.elapsed().as_millis()
+                );
                 true
             }
             Err(e) => {
