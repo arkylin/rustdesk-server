@@ -99,6 +99,7 @@ type RelayServers = Vec<String>;
 const CHECK_RELAY_TIMEOUT: u64 = 3_000;
 static ALWAYS_USE_RELAY: AtomicBool = AtomicBool::new(false);
 static MUST_LOGIN: AtomicBool = AtomicBool::new(false);
+static USE_FAILOVER: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 struct Inner {
@@ -226,6 +227,28 @@ impl RendezvousServer {
                 "N"
             }
         );
+
+        // 读取负载均衡策略配置
+        let relay_strategy = get_arg("relay-strategy");
+        log::debug!("relay_strategy={}", relay_strategy);
+        if relay_strategy.to_lowercase() == "failover"
+            || (relay_strategy.is_empty()
+                && std::env::var("RELAY_STRATEGY")
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    == "failover")
+        {
+            USE_FAILOVER.store(true, Ordering::SeqCst);
+        }
+
+        log::info!(
+            "RELAY_STRATEGY={}",
+            if USE_FAILOVER.load(Ordering::SeqCst) {
+                "failover"
+            } else {
+                "round-robin"
+            }
+        );
         if test_addr.to_lowercase() != "no" {
             let test_addr = if test_addr.is_empty() {
                 listener.local_addr()?
@@ -301,7 +324,8 @@ impl RendezvousServer {
         loop {
             tokio::select! {
                 _ = timer_check_relay.tick() => {
-                    if self.relay_servers0.len() > 1 {
+                    // Failover 模式下不进行定期检测，只在实际连接时按需检测
+                    if !USE_FAILOVER.load(Ordering::SeqCst) && self.relay_servers0.len() > 1 {
                         let rs = self.relay_servers0.clone();
                         let tx = self.tx.clone();
                         tokio::spawn(async move {
@@ -1114,6 +1138,12 @@ impl RendezvousServer {
     }
 
     fn get_relay_server(&self, _pa: IpAddr, _pb: IpAddr) -> String {
+        // 故障转移模式：按配置顺序检测，返回第一个可用的
+        if USE_FAILOVER.load(Ordering::SeqCst) {
+            return self.get_relay_server_failover();
+        }
+
+        // 轮询模式：使用健康检查后的列表进行轮询
         if self.relay_servers.is_empty() {
             log::warn!("No relay servers available");
             return "".to_owned();
@@ -1122,10 +1152,53 @@ impl RendezvousServer {
             log::info!("Only one relay server available: {}", server);
             return server;
         }
+
         let i = ROTATION_RELAY_SERVER.fetch_add(1, Ordering::SeqCst) % self.relay_servers.len();
         let server = self.relay_servers[i].clone();
-        log::info!("Selected relay server {} from {} available servers (index: {}, counter: {})", server, self.relay_servers.len(), i, ROTATION_RELAY_SERVER.load(Ordering::SeqCst));
+        log::info!("Selected relay server {} from {} available servers (round-robin mode, index: {}, counter: {})", server, self.relay_servers.len(), i, ROTATION_RELAY_SERVER.load(Ordering::SeqCst));
         server
+    }
+
+    fn get_relay_server_failover(&self) -> String {
+        // 使用原始配置列表（relay_servers0），按顺序检测第一个可用的
+        for server in self.relay_servers0.iter() {
+            let mut host = server.clone();
+            if !host.contains(':') {
+                host = format!("{}:{}", host, config::RELAY_PORT);
+            }
+
+            // 同步检测（使用简单的TCP连接测试）
+            log::debug!("Failover mode: checking relay server {}", host);
+            if Self::check_relay_sync(&host) {
+                log::info!("Selected relay server {} (failover mode, first available)", server);
+                return server.clone();
+            } else {
+                log::warn!("Relay server {} is not available, trying next...", server);
+            }
+        }
+
+        log::error!("No relay servers available in failover mode");
+        "".to_owned()
+    }
+
+    fn check_relay_sync(host: &str) -> bool {
+        use std::net::{TcpStream, ToSocketAddrs};
+        use std::time::Duration;
+
+        // 解析地址
+        let addr = match host.to_socket_addrs() {
+            Ok(mut addrs) => match addrs.next() {
+                Some(addr) => addr,
+                None => return false,
+            },
+            Err(_) => return false,
+        };
+
+        // 尝试连接
+        match TcpStream::connect_timeout(&addr, Duration::from_millis(CHECK_RELAY_TIMEOUT)) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 
     async fn check_cmd(&self, cmd: &str) -> String {
