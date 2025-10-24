@@ -193,3 +193,67 @@ services:
     command: hbbs --relay-strategy=failover -r relay1.example.com:21117,relay2.example.com:21117
     # ... 其他配置
 ```
+
+### 合体镜像配置（Combined Image）
+
+合体镜像将 hbbs、hbbr 和 API 服务整合到单个容器中，简化部署流程。
+
+```yaml
+version: '3'
+
+networks:
+  rustdesk-net:
+    external: false
+
+services:
+  rustdesk:
+    container_name: rustdesk-combined
+    ports:
+      - 21114:21114  # API 服务
+      - 21115:21115  # hbbs - NAT type test
+      - 21116:21116  # hbbs - ID registration & heartbeat
+      - 21116:21116/udp
+      - 21117:21117  # hbbr - Relay
+      - 21118:21118  # hbbs - WebSocket
+      - 21119:21119  # hbbr - WebSocket
+    image: ghcr.io/arkylin/rustdesk-server-combined:latest-amd64
+    environment:
+      # 日志级别（可选）
+      # - RUST_LOG=debug
+
+      # 负载均衡策略
+      - RELAY_STRATEGY=failover
+
+      # 多中继服务器配置
+      - RELAY_SERVERS=relay1.example.com:21117,relay2.example.com:21117
+
+      # 安全配置
+      - ENCRYPTED_ONLY=1  # 仅允许加密连接
+      - MUST_LOGIN=Y      # 强制登录后才能连接
+
+      # 时区配置
+      - TZ=Asia/Shanghai
+
+      # API 服务配置
+      - RUSTDESK_API_RUSTDESK_ID_SERVER=server.example.com:21116
+      - RUSTDESK_API_RUSTDESK_RELAY_SERVER=server.example.com:21117
+      - RUSTDESK_API_RUSTDESK_API_SERVER=https://server.example.com
+      - RUSTDESK_API_KEY_FILE=/data/id_ed25519.pub
+
+      # JWT 配置（请修改为您自己的随机密钥）
+      - RUSTDESK_API_JWT_KEY=your-random-jwt-key-here-please-change-it
+      - RUSTDESK_API_APP_TOKEN_EXPIRE=9000h
+
+    volumes:
+      - ./data/server:/data          # hbbs/hbbr 数据目录
+      - ./data/api:/app/data          # API 数据库目录
+    networks:
+      - rustdesk-net
+    restart: unless-stopped
+```
+
+**注意事项：**
+- 合体镜像适用于中小规模部署，简化运维管理
+- `RUSTDESK_API_JWT_KEY` 必须修改为您自己的随机密钥
+- 如需使用中国镜像源，可使用 `ghcr.nju.edu.cn/arkylin/rustdesk-server-combined:latest-amd64`
+- 确保 `./data/server` 和 `./data/api` 目录具有正确的读写权限
