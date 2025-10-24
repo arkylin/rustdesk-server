@@ -45,13 +45,18 @@ jobs:
           toolchain: "1.88.0"
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
-          
+
 #      - uses: Swatinem/rust-cache@v2
 #        with:
 #          prefix-key: ${{ matrix.job.os }}
 
+      - name: Verify Rust version
+        run: rustc --version
+
       - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        run: |
+          rustc --version
+          cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build
         run: cross build --release --all-features --target=${{ matrix.job.target }}  
